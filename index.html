@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Аврора Шеринг</title>
+
+    <!-- Подключаем стили и скрипт карты Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        /* Базовый сброс и мобильная верстка */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Шапка */
+        header {
+            background-color: #ffffff;
+            padding: 16px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        /* Контейнер для экранов */
+        main {
+            flex: 1;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        /* Экраны (по умолчанию скрыты) */
+        .view {
+            display: none;
+            padding: 20px;
+            height: 100%;
+        }
+
+            /* Активный экран */
+            .view.active {
+                display: flex;
+                flex-direction: column;
+            }
+
+        /* Заглушки для контента */
+        .placeholder-box {
+            background: #e4e4e7;
+            border: 2px dashed #a1a1aa;
+            border-radius: 12px;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #71717a;
+            font-size: 16px;
+            padding: 20px;
+        }
+
+        /* Нижняя навигация */
+        nav {
+            background-color: #ffffff;
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            padding-bottom: env(safe-area-inset-bottom, 10px);
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: #a1a1aa;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            width: 33%;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+            .nav-btn.active {
+                color: #10b981;
+            }
+
+        /* Простые элементы ЛК для визуала */
+        .lk-card {
+            background: #fff;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .btn-primary {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <header id="app-header">Карта станций</header>
+
+    <main>
+        <!-- 1. Карта (тут убрали отступы, чтобы она была на весь экран) -->
+        <div id="view-map" class="view active" style="padding: 0;">
+            <div id="map" style="width: 100%; height: 100%; z-index: 1;"></div>
+        </div>
+
+        <!-- 2. Считыватель QR -->
+        <div id="view-qr" class="view">
+            <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <h3 style="margin-bottom: 16px;">Наведите камеру на QR-код</h3>
+                <div id="qr-reader" style="width: 100%; max-width: 400px; border-radius: 12px; overflow: hidden; background: #000;">
+                    <div style="padding: 40px 20px; text-align: center; color: #a1a1aa;">
+                        Инициализация камеры...
+                    </div>
+                </div>
+                <p id="qr-status" style="margin-top: 16px; color: #71717a; font-size: 14px; text-align: center;"></p>
+            </div>
+        </div>
+        <!-- 3. Личный кабинет -->
+        <div id="view-profile" class="view">
+            <div class="lk-card">
+                <h3>Личный кабинет</h3>
+                <p style="color: #71717a; margin-top: 8px;">ID: 123456789</p>
+            </div>
+
+            <div class="lk-card">
+                <h4>Способы оплаты</h4>
+                <p style="color: #71717a; margin: 8px 0;">Карты не привязаны</p>
+                <button class="btn-primary">💳 Привязать банковскую карту</button>
+            </div>
+        </div>
+    </main>
+
+    <nav>
+        <button class="nav-btn active" data-target="view-map" data-title="Карта станций">
+            <span>🗺️</span>
+            Карта
+        </button>
+        <button class="nav-btn" data-target="view-qr" data-title="Скан QR">
+            <span>📷</span>
+            Скан QR
+        </button>
+        <button class="nav-btn" data-target="view-profile" data-title="Профиль">
+            <span>👤</span>
+            Профиль
+        </button>
+    </nav>
+
+    <!-- Весь наш JavaScript лежит тут -->
+    <script>
+        // --- 1. ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВЗГЛЯДОВ (ВКЛАДОК) ---
+        const navButtons = document.querySelectorAll('.nav-btn');
+        const views = document.querySelectorAll('.view');
+        const header = document.getElementById('app-header');
+
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                navButtons.forEach(b => b.classList.remove('active'));
+                views.forEach(v => v.classList.remove('active'));
+
+                btn.classList.add('active');
+                const targetId = btn.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+                header.textContent = btn.getAttribute('data-title');
+
+                // Если открыли карту - "пинаем" её, чтобы она правильно отрисовалась
+                if (targetId === 'view-map' && typeof myMap !== 'undefined') {
+                    setTimeout(() => { myMap.invalidateSize(); }, 10);
+                }
+                // Логика для QR-сканера
+                if (targetId === 'view-qr') {
+                    loadQRScannerModule(); // Грузим и запускаем камеру
+                } else {
+                    stopCamera(); // Выключаем камеру, если ушли на другую вкладку
+                }
+            });
+        });
+
+        // --- 2. ЛОГИКА КАРТЫ LEAFLET ---
+        let myMap;
+
+        // Имитация ответа от бэкенда (JSON со станциями)
+        const mockStationsResponse = {
+            "status": "success",
+            "data": {
+                "stations": [
+                    {
+                        "station_id": "AUR-1024",
+                        "lat": 55.030204,
+                        "lng": 82.920430,
+                        "address": "Красный проспект, 1",
+                        "available_powerbanks": 5,
+                        "empty_slots": 3
+                    },
+                    {
+                        "station_id": "AUR-1025",
+                        "lat": 55.032500,
+                        "lng": 82.922000,
+                        "address": "Красный проспект, 17",
+                        "available_powerbanks": 0,
+                        "empty_slots": 8
+                    }
+                ]
+            }
+        };
+
+        function initMap() {
+            // Создаем карту (центр - Новосибирск)
+            myMap = L.map('map').setView([55.030204, 82.920430], 15);
+            myMap.attributionControl.setPrefix(false);
+
+            // Подключаем бесплатные тайлы OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(myMap);
+
+            // Расставляем пины
+            mockStationsResponse.data.stations.forEach(station => {
+                const marker = L.marker([station.lat, station.lng]).addTo(myMap);
+
+                // Всплывающее окно
+                marker.bindPopup(`
+                        <div style="font-size: 14px; text-align: center;">
+                            <b>Станция ${station.station_id}</b><br>
+                            ${station.address}<br><br>
+                            🔋 Доступно: <b>${station.available_powerbanks}</b><br>
+                            🕳 Слотов: <b>${station.empty_slots}</b><br><br>
+                            <button onclick="alert('Отправляем запрос на аренду станции ${station.station_id}')"
+                                    style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">
+                                Арендовать
+                            </button>
+                        </div>
+                    `);
+            });
+        }
+
+        // Запускаем карту, как только загрузится страница
+        document.addEventListener('DOMContentLoaded', initMap);
+
+        // --- 3. ЛОГИКА СКАНЕРА QR (Ленивая загрузка) ---
+        let qrScriptLoaded = false;
+        let html5QrCode = null;
+
+        // Функция для динамической подгрузки скрипта
+        function loadQRScannerModule() {
+            if (qrScriptLoaded) return; // Если уже загрузили, ничего не делаем
+
+            document.getElementById('qr-status').textContent = 'Загрузка модуля камеры...';
+
+            const script = document.createElement('script');
+            script.src = "https://unpkg.com/html5-qrcode";
+            script.onload = () => {
+                qrScriptLoaded = true;
+                document.getElementById('qr-status').textContent = 'Модуль загружен. Запуск камеры...';
+                startCamera();
+            };
+            script.onerror = () => {
+                document.getElementById('qr-status').textContent = 'Ошибка загрузки модуля. Проверьте интернет.';
+            };
+
+            document.head.appendChild(script);
+        }
+
+        // Запуск самой камеры и распознавания
+        function startCamera() {
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("qr-reader");
+            }
+
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+            // Запрашиваем заднюю камеру (environment)
+            html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText, decodedResult) => {
+                    // УСПЕХ: QR-код прочитан!
+                    // Для теста выводим alert и останавливаем сканер, чтобы не спамил
+                    alert(`QR распознан!\nОтправляем запрос аренды для: ${decodedText}`);
+                    stopCamera();
+
+                    // Здесь в будущем мы будем формировать JSON-запрос "start_rent" 
+                    // и отправлять его на твой бэкенд
+                },
+                (errorMessage) => {
+                    // Ошибки сканирования происходят каждый кадр, когда QR не найден в фокусе. 
+                    // Мы их просто игнорируем, это нормальное поведение.
+                }
+            ).then(() => {
+                document.getElementById('qr-status').textContent = 'Камера работает. Ищем QR-код станции.';
+            }).catch((err) => {
+                console.error(err);
+                document.getElementById('qr-status').textContent = 'Нет доступа к камере. Разрешите его в настройках браузера.';
+            });
+        }
+
+        // Остановка камеры (чтобы не жрать батарею, когда ушли с вкладки)
+        function stopCamera() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('qr-status').textContent = 'Камера остановлена.';
+                }).catch(err => console.error("Ошибка остановки камеры", err));
+            }
+        }
+
+    </script>
+</body>
+</html>

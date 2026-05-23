@@ -148,15 +148,32 @@
         </div>
         <!-- 3. Личный кабинет -->
         <div id="view-profile" class="view">
-            <div class="lk-card">
-                <h3>Личный кабинет</h3>
-                <p style="color: #71717a; margin-top: 8px;">ID: 123456789</p>
+            <div class="lk-card" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 id="lk-phone">+7 (999) 123-45-67</h3>
+                    <p style="color: #71717a; font-size: 13px; margin-top: 4px;">ID: 123456789</p>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 12px; color: #71717a;">Баланс</span>
+                    <div style="font-size: 20px; font-weight: bold; color: #10b981;" id="lk-balance">250 ₽</div>
+                </div>
             </div>
 
             <div class="lk-card">
-                <h4>Способы оплаты</h4>
-                <p style="color: #71717a; margin: 8px 0;">Карты не привязаны</p>
-                <button class="btn-primary">💳 Привязать банковскую карту</button>
+                <h4 style="margin-bottom: 12px;">Способы оплаты</h4>
+                <div id="card-status" style="color: #333; margin-bottom: 12px; font-size: 15px;">
+                    💳 Карта: <b>Мир *4321</b>
+                </div>
+                <button id="btn-bind-card" class="btn-primary" style="display: none;">💳 Привязать карту</button>
+                <button id="btn-unbind-card" style="background: #f4f4f5; color: #ef4444; border: 1px solid #e4e4e7; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: bold; width: 100%; cursor: pointer;">
+                    Отвязать карту
+                </button>
+            </div>
+
+            <div class="lk-card" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
+                <h4 style="margin-bottom: 12px;">История аренды</h4>
+                <div id="history-container" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                </div>
             </div>
         </div>
     </main>
@@ -333,7 +350,79 @@
                 }).catch(err => console.error("Ошибка остановки камеры", err));
             }
         }
+        // --- 4. ЛОГИКА ПРОФИЛЯ И ОПЛАТЫ ---
 
+        // Имитируем данные, пришедшие от бэкенда по нашему JSON-контракту
+        const mockProfileResponse = {
+            "status": "success",
+            "data": {
+                "user_info": { "id": "123456789", "phone": "+7 (999) 123-45-67", "balance": 250 },
+                "cards": [{ "card_id": "card_idx_77", "masked_pan": "*4321", "system": "Мир" }],
+                "history": [
+                    { "date": "22.05.2026", "address": "Красный проспект, 1", "duration": "45 мин", "cost": "150 ₽" },
+                    { "date": "18.05.2026", "address": "ул. Ленина, 12", "duration": "2 ч", "cost": "300 ₽" },
+                    { "date": "15.05.2026", "address": "Площадь Маркса, 3", "duration": "1 ч 15 мин", "cost": "200 ₽" }
+                ]
+            }
+        };
+
+        const btnBindCard = document.getElementById('btn-bind-card');
+        const btnUnbindCard = document.getElementById('btn-unbind-card');
+        const cardStatus = document.getElementById('card-status');
+        const historyContainer = document.getElementById('history-container');
+
+        // Функция для отрисовки истории поездок
+        function renderHistory() {
+            historyContainer.innerHTML = ''; // Очищаем контейнер
+
+            if (mockProfileResponse.data.history.length === 0) {
+                historyContainer.innerHTML = '<p style="color: #71717a; font-size: 14px;">Поездок пока не было</p>';
+                return;
+            }
+
+            mockProfileResponse.data.history.forEach(item => {
+                const itemHtml = `
+            <div style="border-bottom: 1px solid #f4f4f5; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 500; font-size: 14px;">${item.address}</div>
+                    <div style="color: #a1a1aa; font-size: 12px; margin-top: 2px;">${item.date} • ${item.duration}</div>
+                </div>
+                <div style="font-weight: bold; font-size: 14px; color: #333;">${item.cost}</div>
+            </div>
+        `;
+                historyContainer.insertAdjacentHTML('beforeend', itemHtml);
+            });
+        }
+
+        // Управление привязкой/отвязкой карты
+        btnBindCard.addEventListener('click', () => {
+            btnBindCard.innerHTML = '⏳ Проверка...';
+            btnBindCard.disabled = true;
+
+            setTimeout(() => {
+                cardStatus.innerHTML = '胶 Карта: <b>Мир *4321</b>';
+                cardStatus.style.display = 'block';
+                btnBindCard.style.display = 'none';
+                btnUnbindCard.style.display = 'block';
+                btnBindCard.innerHTML = '💳 Привязать карту';
+                btnBindCard.disabled = false;
+                mockProfileResponse.data.cards.push({ "card_id": "new" }); // Меняем стейт в памяти
+            }, 1000);
+        });
+
+        btnUnbindCard.addEventListener('click', () => {
+            if (confirm('Отвязать карту? Без неё вы не сможете брать повербанки.')) {
+                cardStatus.style.display = 'none';
+                btnUnbindCard.style.display = 'none';
+                btnBindCard.style.display = 'block';
+                mockProfileResponse.data.cards = []; // Очищаем стейт в памяти
+            }
+        });
+
+        // Запускаем рендер истории при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            renderHistory();
+        });
     </script>
 </body>
 </html>
